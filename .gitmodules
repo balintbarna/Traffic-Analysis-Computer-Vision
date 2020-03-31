@@ -1,0 +1,3 @@
+[submodule "src/video_stabilizer_node"]
+	path = src/video_stabilizer_node
+	url = https://github.com/henrikmidtiby/video_stabilizer_node.git
