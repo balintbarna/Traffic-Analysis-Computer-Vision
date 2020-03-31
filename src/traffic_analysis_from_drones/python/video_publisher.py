@@ -19,17 +19,15 @@ class video_frame_publisher:
         self.cap = cv2.VideoCapture(video_source)
         self.image_pub = rospy.Publisher("video_frame", Image, queue_size=1)
         self.bridge = CvBridge()
-        self.rate = rospy.Rate(framerate)
+        self.timer = rospy.Timer(rospy.Duration(1. / framerate), self.publish_frame)
 
-    def publish(self):
-        while True:
-            try:
-                ret, image = self.cap.read()
-                converted_image = self.bridge.cv2_to_imgmsg(image, "bgr8")
-                self.image_pub.publish(converted_image)
-                self.rate.sleep()
-            except CvBridgeError as e:
-                print(e)
+    def publish_frame(self, event):
+        try:
+            ret, image = self.cap.read()
+            converted_image = self.bridge.cv2_to_imgmsg(image, "bgr8")
+            self.image_pub.publish(converted_image)
+        except CvBridgeError as e:
+            print(e)
 
 
 def main():
@@ -46,8 +44,10 @@ def main():
     options, args = parser.parse_known_args()
 
     ip = video_frame_publisher(options.video_source, options.framerate)
-    ip.publish()
-    rospy.spin()
+    try:
+        rospy.spin()
+    except KeyboardInterrupt:
+        print("Shutting down")
 
 
 if __name__ == '__main__':

@@ -13,4 +13,5 @@
 	<node name="stabilizer" pkg="video_stabilizer_node" type="stabilizer.py" />
 
 	<!-- Detect and track moving objects in the video -->
+	<node name="car_tracker" pkg="traffic_analysis_from_drones" type="car_tracker.py" />
 </launch>
