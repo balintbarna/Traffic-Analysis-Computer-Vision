@@ -15,10 +15,8 @@
 	<!-- Map stabilizer to homography package -->
 	<remap to="/stabilized_frame" from="homography_input"/>
 
-	<!-- TODO -->
-	<!-- launch homography package here -->
-	<remap to="/homography_input" from="homography_output"/>
-	<!-- then delete this temporary map -->
+	<!-- Do homography transformation -->
+	<node name="homography" pkg="homography" type="homography.py" />
 
 	<!-- Map Homography to tracker package -->
 	<remap to="/homography_output" from="tracker_input"/>
