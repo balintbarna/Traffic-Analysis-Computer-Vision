@@ -4,7 +4,7 @@
 
 	<!-- Publish frames from the traffic video on a ros topic -->
 	<node name="video_frame_publisher" pkg="traffic_analysis_from_drones" type="video_publisher.py" 
-		args="--video_source '/home/henrik/Nextcloud/Work/01 teaching courses/2020-02-01 RMURV2/materials/miniprojects/03_traffic_analysis/src/traffic_analysis_from_drones/data/traffic_video_dyrskuepladsen.mp4' --framerate 10"/>
+		args="--video_source '$(find traffic_analysis_from_drones)/data/traffic_video_dyrskuepladsen.mp4' --framerate 10"/>
 
 	<!-- Connect the subscriber for the image_raw topic with the data on the /video_frame topic -->
 	<remap to="/video_frame" from="image_raw"/>
