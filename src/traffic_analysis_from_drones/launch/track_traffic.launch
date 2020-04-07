@@ -7,10 +7,21 @@
 		args="--video_source '$(find traffic_analysis_from_drones)/data/traffic_video_dyrskuepladsen.mp4' --framerate 10"/>
 
 	<!-- Connect the subscriber for the image_raw topic with the data on the /video_frame topic -->
-	<remap to="/video_frame" from="image_raw"/>
+	<remap to="/video_stream_output" from="image_raw"/>
 
 	<!-- Stabilize the video -->
 	<node name="stabilizer" pkg="video_stabilizer_node" type="stabilizer.py" />
+
+	<!-- Map stabilizer to homography package -->
+	<remap to="/stabilized_frame" from="homography_input"/>
+
+	<!-- TODO -->
+	<!-- launch homography package here -->
+	<remap to="/homography_input" from="homography_output"/>
+	<!-- then delete this temporary map -->
+
+	<!-- Map Homography to tracker package -->
+	<remap to="/homography_output" from="tracker_input"/>
 
 	<!-- Detect and track moving objects in the video -->
 	<node name="car_tracker" pkg="traffic_analysis_from_drones" type="car_tracker.py" />

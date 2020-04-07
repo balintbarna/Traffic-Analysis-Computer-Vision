@@ -17,7 +17,7 @@ class video_frame_publisher:
     def __init__(self, video_source, framerate):
         rospy.init_node('video_frame_publisher', anonymous=True)
         self.cap = cv2.VideoCapture(video_source)
-        self.image_pub = rospy.Publisher("video_frame", Image, queue_size=1)
+        self.image_pub = rospy.Publisher("video_stream_output", Image, queue_size=1)
         self.bridge = CvBridge()
         self.timer = rospy.Timer(rospy.Duration(1. / framerate), self.publish_frame)
 
