@@ -3,7 +3,7 @@
 import time
 import argparse
 import roslib
-roslib.load_manifest('traffic_analysis_from_drones')
+roslib.load_manifest('video_stream')
 import sys
 import rospy
 import cv2
