@@ -3,7 +3,7 @@
 	<node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" />
 
 	<!-- Publish frames from the traffic video on a ros topic -->
-	<node name="video_frame_publisher" pkg="traffic_analysis_from_drones" type="video_publisher.py" 
+	<node name="video_frame_publisher" pkg="video_stream" type="video_publisher.py" 
 		args="--video_source '$(find traffic_analysis_from_drones)/data/traffic_video_dyrskuepladsen.mp4' --framerate 10"/>
 
 	<!-- Connect the subscriber for the image_raw topic with the data on the /video_frame topic -->

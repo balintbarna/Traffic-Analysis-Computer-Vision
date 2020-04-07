@@ -32,14 +32,14 @@ class video_frame_publisher:
 
 def main():
     parser = argparse.ArgumentParser(
-            description='Video file to use')
+        description='Video file to use')
     parser.add_argument(
-            '--video_source', type=str, help='path to video file')
+        '--video_source', type=str, help='path to video file')
     parser.add_argument(
-            '--framerate', 
-            type=int, 
-            default=20, 
-            help='framerate during playback')
+        '--framerate',
+        type=int,
+        default=20,
+        help='framerate during playback')
 
     options, args = parser.parse_known_args()
 
