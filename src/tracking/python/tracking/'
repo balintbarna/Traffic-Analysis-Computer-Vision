@@ -1,0 +1,471 @@
+#!/usr/bin/env python3.6
+
+import sys
+import argparse
+import threading
+
+import cv2
+import numpy as np
+
+import rospy
+import rosbag
+from std_msgs.msg import String
+
+from ros_video.ros_img_stream import ROSImageStream
+from pre_tracker import PreTracker
+from shift_tracker import CamshiftTracker
+
+class MultiTracker:
+    def __init__(
+            self,
+            tracker_type, # MeanshiftTracker, CamshiftTracker
+            cnt_min_area=1000,
+            lost_ttl_attempts=5,
+            max_tracked_objects=30,
+            pre_tracker=None,
+            in_frames_topic="/img_stream",
+            out_events_topic="/multi_tracker/global_events",
+            out_status_topic="/multi_tracker/status",
+            out_window_topic="/multi_tracker/window",
+            in_kalman_topic="/multi_tracker/pos",
+            out_frames_topic="/multi_tracker/tracked_frames"
+    ):
+        self.count = 5
+
+        self.tracker_type = tracker_type
+        self.cnt_min_area = cnt_min_area
+        self.lost_ttl_attempts = lost_ttl_attempts
+        self.max_tracked_objects = max_tracked_objects
+
+        if pre_tracker == None:
+            self.pre_tracker = PreTracker()#processed_frame_topic="/pre_tracked_frame")
+            self.pre_tracker.set_color_range(color_range=((0, 0, 0), (20, 20, 20)))
+            self.pre_tracker.set_median_blur(5)
+            self.pre_tracker.set_pre_track_callbacks(
+                    [self.pre_tracker.pre_track_color_range, self.pre_tracker.pre_track_median_blur]
+            )
+        else:
+            self.pre_tracker = pre_tracker
+
+        self.in_frames_topic = in_frames_topic
+        self.out_events_topic = out_events_topic
+        self.out_status_topic = out_status_topic
+        self.out_window_topic = out_window_topic
+        self.in_kalman_topic = in_kalman_topic
+        self.out_frames_topic = out_frames_topic
+
+        self.frames_img_stream = ROSImageStream(sub_topic_name=self.frames_topic)
+
+        self.events_pub = rospy.Publisher(
+                self.out_events_topic,
+                String,
+                queue_size=self.max_tracked_objects
+        )
+
+        self.status_pub = rospy.Publisher(
+                self.out_status_topic,
+                String,
+                queue_size=self.max_tracked_objects
+        )
+
+        self.window_pub = rospy.Pubisher(
+                self.out_window_topic,
+                String,
+                queue_size=self.max_tracked_objects
+        )
+
+        self.kalman_sub(
+                self.in_kalman_topic,
+                String,
+                callback=self.kalman_pos_callback,
+                queue_size=self.max_tracked_objects
+        )
+
+        self.out_frames_pub = ROSImageStream(pub_topic_name=self.out_frames_topic)
+
+        self.tracked_objects = {} # {"key": {"tracker", "track_window", "status", "ttl", "lock", "status_pub", "window_pub", "pos_sub"}}
+
+    def start(self):
+        self.frames_img_stream.img_stream_subscribe(self.apply_tracking)
+
+    def apply_tracking(
+            self,
+            frame
+    ):
+        pre_tracked_frame = self.pre_tracker.pre_track(frame)
+
+        self.update_current_trackers(pre_tracked_frame)
+
+        self.discover_new_objects(pre_tracked_frame)
+
+        self.publish_tracked_frame(pre_tracked_frame)
+
+    def update_current_trackers(
+            self,
+            pre_tracked_frame
+    ):
+        # Track
+        remaining_keys = list(self.tracked_objects.keys())
+
+        while len(remaining_keys) > 0:
+            remaining_keys_temp = remaining_keys
+
+            for key in remaining_keys:
+                key = str(key)
+                obj = self.tracked_objects[key]
+                
+                if not self.tracked_objects[key]["lock"].acquire(blocking=False):
+                    continue
+
+                if obj["status"] == "removed":
+                    del self.tracked_objects[key]
+
+                    remaining_keys_temp.remove(key)
+                    continue
+
+                ret, obj["track_window"] = obj["tracker"].track(pre_tracked_frame)
+
+                if (
+                        obj["track_window"][0] < 0 or
+                        obj["track_window"][0] > pre_tracked_frame.shape[0] - obj["track_window"][2] or
+                        obj["track_window"][1] < 0 or
+                        obj["track_window"][1] > pre_tracked_frame.shape[1] - obj["track_window"][3]
+                ):
+                    self.handle_lost_object(key)
+
+                    obj["lock"].release()
+
+                    remaining_keys_temp.remove(key)
+                    continue
+
+                sub_frame = pre_tracked_frame[
+                            obj["track_window"][1]:obj["track_window"][1] + obj["track_window"][2],
+                            obj["track_window"][0]:obj["track_window"][0] + obj["track_window"][3]]
+
+                cnts, _ = cv2.findContours(
+                        sub_frame,
+                        cv2.RETR_TREE,
+                        cv2.CHAIN_APPROX_SIMPLE
+                )
+                
+                if len(cnts) == 0:
+                    self.handle_lost_object(key)
+
+                    obj["lock"].release()
+
+                    remaining_keys_temp.remove(key)
+                    continue
+
+                max_cnt = cnts[0]
+                max_cnt_area = cv2.contourArea(max_cnt)
+
+                for cnt in cnts:
+                    cnt_area = cv2.contourArea(cnt)
+
+                    if cnt_area > max_cnt_area:
+                        max_cnt_area = cnt_area
+
+                if max_cnt_area < self.cnt_min_area:
+                    self.handle_lost_object(key)
+
+                    obj["lock"].release()
+
+                    remaining_keys_temp.remove(key)
+                    continue
+
+                self.handle_ok_object(
+                        key,
+                        pre_tracked_frame
+                )
+
+                obj["lock"].release()
+
+                remaining_keys_temp.remove(key)
+
+            remaining_keys = remaining_keys_temp
+
+        # Find overlapping
+
+        remaining_keys = list(self.tracked_objects.keys())
+
+        while len(remaining_keys) > 0:
+            remaining_keys_temp = remaining_keys
+
+            for key in remaining_keys:
+                key = str(key)
+                obj = self.tracked_objects[key]
+
+                obj["lock"].acquire()
+
+                if obj["status"] != "ok" and obj["status"] != "overlapping":
+                    obj["lock"].release()
+                    
+                    remaining_keys_temp.remove(key)
+                    continue
+
+                overlapping = False
+
+                remaining_keys1 = list(self.tracked_objects.keys())
+
+                while len(remaining_keys1) > 0:
+                    remaining_keys_temp1 = remaining_keys1
+
+                    for key1 in remaining_keys1:
+                        key1 = str(key1)
+
+                        if key1 == key:
+                            remaining_keys_temp1.remove(key1)
+                            continue
+
+                        obj1 = self.tracked_objects[key1]
+
+                        obj1["lock"].acquire()
+                        
+                        if not (
+                                obj["track_window"][0] + obj["track_window"][1] < obj1["track_window"][0] or
+                                obj1["track_window"][0] + obj1["track_window"][3] < obj["track_window"][0] or
+                                obj["track_window"][1] + obj["track_window"][2] < obj1["track_window"][1] or
+                                obj1["track_window"][1] + obj1["track_window"][2] < obj["track_window"][1]
+                        ):
+                            overlapping = True
+
+                        obj1["lock"].release()
+
+                        if overlapping:
+                            break
+
+                        remaining_keys_temp1.remove(key1)
+
+                    if overlapping:
+                        break
+
+                    remaining_keys1 = remaining_keys_temp1
+
+                if overlapping: 
+                    self.handle_overlapping_object(key)
+                elif obj["status"] == "overlapping":
+                    self.handle_ok_object(
+                            key,
+                            pre_tracked_frame
+                    )
+
+                obj["lock"].release()
+
+                remaining_keys_temp.remove(key)
+
+            remaining_keys = remaining_keys_temp
+
+        return pre_tracked_frame
+
+    def handle_lost_object(
+            self,
+            key
+    ):
+        last_status = self.tracked_objects[key]["status"]
+
+        self.tracked_objects[key]["status"] = "lost"
+        self.tracked_objects[key]["ttl"] -= 1
+
+        if self.tracked_objects[key]["ttl"] <= 0:
+            self.remove_tracked_object(key) 
+        elif last_status != "lost":
+            #self.tracked_objects[key]["status_pub"].publish("lost")
+            
+            self.status_pub.publish(key + " lost")
+
+    def handle_ok_object(
+            self,
+            key,
+            pre_tracked_frame
+    ):
+        last_status = self.tracked_objects[key]["status"]
+
+        self.tracked_objects[key]["ttl"] = self.lost_ttl_attempts
+        self.tracked_objects[key]["status"] = "ok"
+
+        pre_tracked_frame[
+            self.tracked_objects[key]["track_window"][0]:self.tracked_objects[key]["track_window"][0] + self.tracked_objects[key]["track_window"][2],
+            self.tracked_objects[key]["track_window"][1]:self.tracked_objects[key]["track_window"][1] + self.tracked_objects[key]["track_window"][3]
+        ] = np.zeros(
+                pre_tracked_frame[
+                    self.tracked_objects[key]["track_window"][0]:self.tracked_objects[key]["track_window"][0] + self.tracked_objects[key]["track_window"][2],
+                    self.tracked_objects[key]["track_window"][1]:self.tracked_objects[key]["track_window"][1] + self.tracked_objects[key]["track_window"][3]
+                ].shape
+        )
+
+        if last_status != "ok":
+            self.tracked_objects[key]["status_pub"].publish("ok")
+
+        #msg = Float32MultiArray()
+        #msg.data = list(self.tracked_objects[key]["track_window"])
+        #self.tracked_objects[key]["window_pub"].publish(msg)
+
+        self.window_pub.publish(key + " {0} {1} {2} {3}".format(self.tracked_objects[key]["track_window"][0], self.tracked_objects[key]["track_window"][1], self.tracked_objects[key]["track_window"][2], self.tracked_objects[key]["track_window"][3]))
+
+    def handle_overlapping_object(
+            self,
+            key
+    ):
+        self.tracked_objects[key]["status"] = "overlapping"
+        self.tracked_objects[key]["ttl"] -= 1
+
+        if self.tracked_objects[key]["ttl"] <= 0:
+            self.remove_tracked_object(key)
+        else:
+            #self.tracked_objects[key]["status_pub"].publish("overlapping")
+
+            self.status_pub.publish(key + " overlapping")
+            
+            #if self.tracked_objects[key]["pos_sub"] == None:
+            #    self.tracked_objects[key]["pos_sub"] = rospy.Subscriber(
+            #            self.kalman_pos_path + str(key),
+            #            Float32MultiArray,
+            #            callback=self.kalman_pos_callback,
+            #            callback_args=key,
+            #            queue_size=1
+            #    )
+
+    def discover_new_objects(
+            self,
+            updated_frame
+    ):
+        cnts, _ = cv2.findContours(
+                updated_frame,
+                cv2.RETR_TREE,
+                cv2.CHAIN_APPROX_SIMPLE
+        ) 
+
+        bounding_rects = []
+
+        for cnt in cnts:
+            rect = cv2.boundingRect(cnt)
+
+            overlapping = False
+
+            for b_rect in bounding_rects:
+                if not (
+                        rect[1] + rect[2] < b_rect[1] or
+                        b_rect[1] + b_rect[2] < rect[1] or
+                        rect[0] + rect[3] < b_rect[0] or
+                        b_rect[0] + b_rect[3] < rect[0]
+                ):
+                    overlapping = True
+                    break
+
+            if overlapping:
+                continue
+
+            cnt_area = cv2.contourArea(cnt)
+
+            if cnt_area < self.cnt_min_area:
+                continue
+
+            bounding_rects.append(rect)
+
+            self.create_tracked_object(cnt)
+
+    def create_tracked_object(
+            self,
+            cnt
+    ):
+
+        tracked_obj = {}
+        
+        key = 0
+
+        if len(self.tracked_objects.keys()) > 0:
+            key = str(int(max(self.tracked_objects.keys(), key=lambda k: int(k))) + 1)
+
+        tracked_obj["track_window"] = cv2.boundingRect(cnt)
+        tracked_obj["tracker"] = self.tracker_type(init_window=tracked_obj["track_window"])
+        tracked_obj["status"] = "ok"
+        tracked_obj["ttl"] = self.lost_ttl_attempts
+        tracked_obj["lock"] = threading.Lock()
+        tracked_obj["status_pub"] = rospy.Publisher(
+                self.tracker_status_path + str(key),
+                String,
+                queue_size=10
+        )
+        tracked_obj["window_pub"] = rospy.Publisher(
+                self.tracker_window_path + str(key),
+                Float32MultiArray
+        )
+        tracked_obj["pos_sub"] = None
+
+        self.tracked_objects[str(key)] = tracked_obj
+
+        self.global_events_pub.publish("+ " + str(key))
+
+    def remove_tracked_object(
+            self,
+            key
+    ):
+        if self.tracked_objects[key]["pos_sub"] != None:
+            self.tracked_objects[key]["pos_sub"].unregister()
+            self.tracked_objects[key]["pos_sub"] = None
+
+        self.tracked_objects[key]["status_pub"].unregister()
+        self.tracked_objects[key]["status_pub"] = None
+        self.tracked_objects[key]["window_pub"].unregister()
+        self.tracked_objects[key]["window_pub"] = None
+        
+        if self.tracked_objects[key]["pos_sub"] != None:
+            self.tracked_objects[key]["pos_sub"].unregister()
+            self.tracked_objects[key]["pos_sub"] = None
+
+        self.tracked_objects[key]["status"] = "removed"
+
+        self.global_events_pub.publish("- " + str(key))
+
+    def kalman_pos_callback(
+            self,
+            msg
+    ):
+        self.tracked_object[key]["lock"].acquire()
+
+        if self.tracked_objects[key]["status"] == "lost":
+            self.tracked_objects[key]["track_window"][0] = msg.data[0]
+            self.tracked_objects[key]["track_window"][1] = msg.data[1]
+
+        self.tracked_objects[key]["lock"].release()
+
+    def publish_tracked_frame(
+            self,
+            frame
+    ):
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        remaining_keys = list(self.tracked_objects.keys())
+
+        while len(remaining_keys) > 0:
+            remaining_keys_temp = remaining_keys
+
+            for key in remaining_keys:
+                obj = self.tracked_objects[key]
+
+                if not obj["lock"].acquire(blocking=False):
+                    continue
+
+                if obj["status"] == "ok":
+                    frame = cv2.rectangle(
+                            frame,
+                            (obj["track_window"][0], obj["track_window"][1]),
+                            (obj["track_window"][0] + obj["track_window"][2], obj["track_window"][1] + obj["track_window"][3]),
+                            (255,0,0),
+                            thickness=3
+                    )
+
+                obj["lock"].release()
+
+                remaining_keys_temp.remove(key)
+
+            remaining_keys = remaining_keys_temp
+
+        self.out_frames_pub.publish_single(frame)
+
+if __name__ == '__main__':
+    rospy.init_node("multi_tracker")
+
+    mt = MultiTracker(CamshiftTracker)
+
+    mt.start()
+    
