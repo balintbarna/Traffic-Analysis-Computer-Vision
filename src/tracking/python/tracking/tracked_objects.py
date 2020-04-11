@@ -1,16 +1,21 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with classes TrackedObject and TrackedObjects.
 
     Change log: 
     Created     frnyb       20200406
+
+    Rewritten for Python 2.7:
+    Shebang and copy
+                frnyb       20200410
 """
 
 ########################################################################
 # Imports:
 
 import threading
+from copy import copy
 
 import numpy as np
 
@@ -79,15 +84,12 @@ class TrackedObject:
             msg.id = self.id
             msg.status = "ok"
             self.status_pub.publish(msg)
-            #self.status_pub.publish(str(self.id) + " ok")
 
         if self.window_pub != None:
             msg = Window()
             msg.id = self.id
             msg.window = self.track_window
             self.window_pub.publish(msg)
-
-            #self.window_pub.publish(str(self.id) + " {0} {1} {2} {3}".format(self.track_window[0], self.track_window[1], self.track_window[2], self.track_window[3]))
 
         self.status = "ok"
 
@@ -103,7 +105,6 @@ class TrackedObject:
                 msg.id = self.id
                 msg.status = "lost"
                 self.status_pub.publish(msg)
-                #self.status_pub.publish(str(self.id) + " lost")
 
         self.status = "lost"
                 
@@ -115,7 +116,6 @@ class TrackedObject:
             msg.id = self.id
             msg.status = "removed"
             self.status_pub.publish(msg)
-            #self.status_pub.publish(str(self.id) + " removed")
 
     def supply_position(
             self,
@@ -182,11 +182,11 @@ class TrackedObjects:
             self.lock = True
 
     def __iter__(self):
-        self.remaining_keys = self.keys.copy()
+        self.remaining_keys = copy(self.keys)
 
         return self
 
-    def __next__(self):
+    def next(self):
         if len(self.remaining_keys) == 0:
             raise StopIteration
 

@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with class PreTracker for preprocessing for visual tracking
@@ -6,6 +6,9 @@
 
     Change log: 
     Created     frnyb       20200330
+
+    Shebang changed to Python 2.7
+                frnyb       20200410
 """
 
 ########################################################################

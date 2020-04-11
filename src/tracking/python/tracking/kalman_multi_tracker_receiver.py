@@ -1,10 +1,13 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with class KalmanMultiTrackerReceiver. This class utilizes MultiTrackerReceiver from package "tracking" and RTKalmanFilter from package "kalman_filter" to follow multiple tracked objects visually tracked by a MultiTracker node.
 
     Change log: 
     Created     frnyb       20200402
+    
+    Changed shebang to Python 2.7
+                frnyb       20200410
 """
 
 ########################################################################
@@ -27,7 +30,7 @@ from multi_tracker import MultiTrackerReceiver
 ########################################################################
 # Classes:
 
-class KalmanMultiTrackerReceiver:
+class KalmanMultiTrackerReceiver():
     class KalmanTrackerReceiver(RTKalmanFilter):
         def __init__(
                 self,
@@ -41,6 +44,9 @@ class KalmanMultiTrackerReceiver:
             self.prediction_topic = prediction_topic
             self.update_topic = update_topic
             self.state_est_topic = state_est_topic
+
+            self.sensor_bag = None
+            self.sensor_topic = None
 
             self.pub_prediction = None
             self.pub_update = None
@@ -59,8 +65,8 @@ class KalmanMultiTrackerReceiver:
                         [0., 0., 0., 1.]]
             )
             H = np.array([
-                [1., 0., 0., 0.],
-                [0., 1., 0., 0.]]
+                [0., 1., 0., 0.],
+                [1., 0., 0., 0.]]
             )
             P = np.array([
                 [10. ,0., 0., 0.], 
@@ -87,12 +93,6 @@ class KalmanMultiTrackerReceiver:
 
             self.update_thread = None
             self.prediction_thread = None
-
-        def start(self):
-            super().start(
-                    loop=False,
-                    start_update=False
-            )
 
     def __init__(
             self,
@@ -131,8 +131,11 @@ class KalmanMultiTrackerReceiver:
                 out_kalman_topic=self.out_kalman_topic
         )
 
-    def start(self):
-        self.multi_tracker_receiver.start()
+    def start(
+            self,
+            loop=True
+    ):
+        self.multi_tracker_receiver.start(loop=loop)
 
     def event_callback(
             self,
@@ -146,16 +149,14 @@ class KalmanMultiTrackerReceiver:
                 self.kalman_filters[key].stop()
                 self.kalman_filters[key] = None
 
-            if key != 4:
-                self.kalman_filters_lock.release()
-                return
-
             self.kalman_filters[key] = self.KalmanTrackerReceiver(
                     dt_prediction=self.dt_prediction,
                     prediction_topic=self.prediction_topic,
                     update_topic=self.update_topic,
                     state_est_topic=self.state_est_topic
             )
+
+
             self.kalman_filters[key].start()
 
         elif event == "-":
@@ -178,8 +179,9 @@ class KalmanMultiTrackerReceiver:
                         "prediction": {
                             "callback": self.multi_tracker_receiver.supply_kalman_estimate,
                             "arg": key
-                        }
+                        } 
                 }
+
                 self.kalman_filters[key].set_callbacks(callbacks)
         
         elif status == "ok" or status == "removed":

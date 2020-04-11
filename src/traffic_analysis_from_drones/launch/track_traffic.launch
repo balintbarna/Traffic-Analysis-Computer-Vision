@@ -1,6 +1,29 @@
 <launch>
+    <!-- System configuration parameters -->
+    <arg name="multitrackernode" default="multi_tracker"/>
+    <arg name="homographyouttopic" default="/homography_output"/>
+    <arg name="multitrackedframestopic" default="/$(arg multitrackernode)/tracked_frames"/>
+    <arg name="pretrackedframestopic" default="/$(arg multitrackernode)/pretracked_frames"/>
+    <arg name="eventstopic" default="/$(arg multitrackernode)/global_events"/>
+    <arg name="statustopic" default="/$(arg multitrackernode)/status"/>
+    <arg name="windowtopic" default="/$(arg multitrackernode)/window"/>
+    <arg name="kalmantopic" default="/$(arg multitrackernode)/pos"/>
+    <arg name="objectminarea" default="150"/>
+    <arg name="lostattempts" default="5"/>
+    <arg name="maxtrackedobjects" default="50"/>
+    <arg name="overlapmargin" default="5"/>
+    <arg name="cropleftright" default="300"/>
+    <arg name="croptop" default="300"/>
+    <arg name="cropbottom" default="100"/>
+    <arg name="blurksize" default="5"/>
+    <arg name="windowmaxwidth" default="35"/>
+
+    <arg name="kalmannode" default="rt_kalman_filter"/>
+    <arg name="dtprediction" default="0.05"/>
+    <arg name="outframestopic" default="/out"/>
+
 	<!-- Open an image visualizer that can listen on various image topics -->
-	<node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" />
+	<node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" args="$(arg outframestopic)"/>
 
 	<!-- Publish frames from the traffic video on a ros topic -->
 	<node name="video_frame_publisher" pkg="video_stream" type="video_publisher.py" 
@@ -19,8 +42,12 @@
 	<node name="homography" pkg="homography" type="homography.py" />
 
 	<!-- Map Homography to tracker package -->
-	<remap to="/homography_output" from="tracker_input"/>
+    <!--<remap to="/homography_output" from="tracker_input"/>-->
 
-	<!-- Detect and track moving objects in the video -->
-	<node name="car_tracker" pkg="traffic_analysis_from_drones" type="car_tracker.py" />
+	<!-- Visual multi tracker -->
+	<node name="visual_tracker" pkg="traffic_analysis_from_drones" type="visual_tracker.py" args="-n $(arg multitrackernode) -i $(arg homographyouttopic) -o $(arg multitrackedframestopic) --pre-tracked-frames-topic $(arg pretrackedframestopic) --events-topic $(arg eventstopic) --status-topic $(arg statustopic) --window-topic $(arg windowtopic) --kalman-topic $(arg kalmantopic) --object-min-area $(arg objectminarea) --lost-attempts $(arg lostattempts) --max-tracked-objects $(arg maxtrackedobjects) --overlap-margin $(arg overlapmargin) --crop-left-right $(arg cropleftright) --crop-top $(arg croptop) --crop-bottom $(arg cropbottom) --blur-ksize $(arg blurksize) --window-max-width $(arg windowmaxwidth)" output="screen"/>
+
+    <!-- Car tracker node -->
+    <node name="car_tracker" pkg="traffic_analysis_from_drones" type="kalman_car_tracker.py" args="-n $(arg kalmannode) --events-topic $(arg eventstopic) --status-topic $(arg statustopic) --window-topic $(arg windowtopic) --kalman-topic $(arg kalmantopic) --max-tracked-objects $(arg maxtrackedobjects) --dt-prediction $(arg dtprediction)" output="screen"/> 
+
 </launch>

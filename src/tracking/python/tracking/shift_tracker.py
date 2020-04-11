@@ -1,10 +1,13 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with classes MeanshiftTracker and CamshiftTracker.
 
     Change log:
     Created     frnyb       20200331
+
+    Shebang chagned to Python 2.7
+                frnyb       20200410
 """
 
 ########################################################################

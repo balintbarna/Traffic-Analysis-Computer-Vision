@@ -14,7 +14,7 @@ from cv_bridge import CvBridge, CvBridgeError
 class homography_node:
     def __init__(self):
         rospy.init_node('homography')
-        self.image_pub = rospy.Publisher("homography_output", Image, queue_size=10)
+        self.image_pub = rospy.Publisher("homography_output", Image, queue_size=1)
 
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("homography_input", Image, self.callback)

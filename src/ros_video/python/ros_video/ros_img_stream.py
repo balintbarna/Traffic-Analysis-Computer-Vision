@@ -1,4 +1,4 @@
-#!/usr/bin/python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with class ROSImageStream for either publishing or subscribing 
@@ -120,7 +120,8 @@ class ROSImageStream:
 
     def img_stream_subscribe(
             self,
-            callback
+            callback,
+            loop=True
     ):
         def _callback(img_msg):
             bridge = CvBridge()
@@ -131,15 +132,15 @@ class ROSImageStream:
             callback(cv_img)
 
         if self.in_bag_name == None:
-            if self.sub == None:
-                self.sub = rospy.Subscriber(
-                        self.sub_topic_name, 
-                        Image, 
-                        callback=_callback,
-                        queue_size=self.queue_size
-                )
-            
-            rospy.spin()
+            self.sub = rospy.Subscriber(
+                    self.sub_topic_name, 
+                    Image, 
+                    callback=_callback,
+                    queue_size=self.queue_size
+            )
+        
+            if loop:
+                rospy.spin()
         else:
             bag = rosbag.Bag(self.in_bag)
 

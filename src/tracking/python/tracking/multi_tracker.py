@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with classes MultiTracker and MultiTrackerReceiver for 
@@ -9,6 +9,10 @@
 
     Change log: 
     Created     frnyb       20200401
+
+    Rewritten for Python 2.7:
+    Shebang, contour finding
+                frnyb       20200410
 """
 
 ########################################################################
@@ -17,6 +21,7 @@
 import sys
 import argparse
 import threading
+from copy import copy
 
 import cv2
 import numpy as np
@@ -39,6 +44,7 @@ class MultiTracker:
             self,
             tracker_type=CamshiftTracker, # MeanshiftTracker, CamshiftTracker
             cnt_min_area=500,
+            window_max_width=None,
             lost_ttl_attempts=10,
             max_tracked_objects=30,
             overlap_margin=25,
@@ -52,6 +58,7 @@ class MultiTracker:
     ):
         self.tracker_type = tracker_type
         self.cnt_min_area = cnt_min_area
+        self.window_max_width = window_max_width
         self.lost_ttl_attempts = lost_ttl_attempts
         self.max_tracked_objects = max_tracked_objects
         self.overlap_margin = overlap_margin
@@ -122,20 +129,44 @@ class MultiTracker:
 
             ret, obj.track_window = self.trackers[obj.id].track(pre_tracked_frame)
 
-            if (
-                    obj.track_window[0] + obj.track_window[2] < 0 or
-                    obj.track_window[0] > pre_tracked_frame.shape[1] or
-                    obj.track_window[1] + obj.track_window[3] < 0 or
-                    obj.track_window[1] > pre_tracked_frame.shape[0]
-            ):
-                pre_tracked_frame = self.handle_lost_object(
-                        obj,
-                        pre_tracked_frame
-                )
+            if self.window_max_width != None:
+                if obj.track_window[2] > self.window_max_width and obj.track_window[3] > self.window_max_width:
+                    obj.track_window = (
+                            obj.track_window[0],
+                            obj.track_window[1],
+                            self.window_max_width,
+                            self.window_max_width
+                    )
+                elif obj.track_window[2] > self.window_max_width:
+                    obj.track_window = (
+                            obj.track_window[0],
+                            obj.track_window[1],
+                            self.window_max_width,
+                            obj.track_window[3]
+                    )
+                elif obj.track_window[3] > self.window_max_width:
+                    obj.track_window = (
+                            obj.track_window[0],
+                            obj.track_window[1],
+                            obj.track_window[2],
+                            self.window_max_width
+                    )
 
-                obj.release_lock()
 
-                continue
+            #if (
+            #        obj.track_window[0] + obj.track_window[2] < 0 or
+            #        obj.track_window[0] > pre_tracked_frame.shape[1] or
+            #        obj.track_window[1] + obj.track_window[3] < 0 or
+            #        obj.track_window[1] > pre_tracked_frame.shape[0]
+            #):
+            #    pre_tracked_frame = self.handle_lost_object(
+            #            obj,
+            #            pre_tracked_frame
+            #    )
+
+            #    obj.release_lock()
+
+            #    continue
 
             x_lowerb, x_upperb, y_lowerb, y_upperb = self.get_slices(
                     obj,
@@ -147,7 +178,7 @@ class MultiTracker:
                     y_lowerb:y_upperb
             ]
 
-            cnts, _ = cv2.findContours(
+            _, cnts, _ = cv2.findContours(
                     sub_frame,
                     cv2.RETR_TREE,
                     cv2.CHAIN_APPROX_SIMPLE
@@ -265,7 +296,7 @@ class MultiTracker:
             self,
             updated_frame
     ):
-        cnts, _ = cv2.findContours(
+        _, cnts, _ = cv2.findContours(
                 updated_frame,
                 cv2.RETR_TREE,
                 cv2.CHAIN_APPROX_SIMPLE
@@ -275,6 +306,30 @@ class MultiTracker:
 
         for cnt in cnts:
             rect = cv2.boundingRect(cnt)
+
+            if self.window_max_width != None:
+                if rect[2] > self.window_max_width and rect[3] > self.window_max_width:
+                    rect = (
+                            rect[0],
+                            rect[1],
+                            self.window_max_width,
+                            self.window_max_width
+                    )
+                elif rect[2] > self.window_max_width:
+                    rect = (
+                            rect[0],
+                            rect[1],
+                            self.window_max_width,
+                            rect[3]
+                    )
+                elif rect[3] > self.window_max_width:
+                    rect = (
+                            rect[0],
+                            rect[1],
+                            rect[2],
+                            self.window_max_width
+                    )
+
 
             overlapping = False
 
@@ -433,10 +488,11 @@ class MultiTrackerReceiver:
         self.tracked_objects.acquire_lock()
 
         if msg.event == "+":
-            if msg.id in list(self.tracked_objects.keys):
-                self.tracked_objects.remove(msg.id)
+            pass
+        #    if msg.id in list(self.tracked_objects.keys):
+        #        self.tracked_objects.remove(msg.id)
 
-            self.tracked_objects.create(key=msg.id)
+        #    self.tracked_objects.create(key=msg.id)
         elif msg.event == "-":
             if msg.id in list(self.tracked_objects.keys):
                 self.tracked_objects.remove(msg.id)
@@ -472,8 +528,14 @@ class MultiTrackerReceiver:
     ):
         self.tracked_objects.acquire_lock()
 
-        if msg.id in list(self.tracked_objects.keys):
-            self.tracked_objects.get_item(msg.id).window = msg.window
+        if msg.id in self.tracked_objects.keys:
+            pass
+            #self.tracked_objects.tracked_objects[self.tracked_objects.keys.index(msg.id)].window = msg.window
+        else:
+            self.tracked_objects.create(
+                    key=msg.id,
+                    window=msg.window
+            )
 
         self.tracked_objects.release_lock()
 
@@ -492,7 +554,7 @@ class MultiTrackerReceiver:
         self.tracked_objects.acquire_lock()
 
         if id in list(self.tracked_objects.keys):
-            obj = self.tracked_objects.get_item(id)
+            obj = self.tracked_objects.tracked_objects[self.tracked_objects.keys.index(id)]
 
             if obj.status == "lost" and obj.track_window != None:
                 obj.track_window = ( 

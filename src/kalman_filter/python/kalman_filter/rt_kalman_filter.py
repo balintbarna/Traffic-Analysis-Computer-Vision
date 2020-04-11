@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python2.7
 
 """
     Module with class RTKalmanFilter for real time Kalman Filtering..
@@ -78,7 +78,7 @@ class RTKalmanFilter:
 
     def start(
             self,
-            loop=True,
+            loop=False,
             callbacks=None, # {"prediction/update": {"callback": callback, "args": ()}}
             start_update=True,
             start_prediction=True
@@ -111,19 +111,15 @@ class RTKalmanFilter:
         self.filter_lock.release()
 
         if start_update:
-            self.update_thread = threading.Thread(
-                    target=self.update_loop, 
-                    daemon=True
-            )
+            self.update_thread = threading.Thread(target=self.update_loop)
+            self.update_thread.daemon = True
             self.update_thread.start()
         else:
             self.update_thread = None
 
         if start_prediction:
-            self.prediction_thread = threading.Thread(
-                    target=self.predict_loop,
-                    daemon=True
-            )
+            self.prediction_thread = threading.Thread(target=self.predict_loop)
+            self.prediction_thread.daemon = True
             self.prediction_thread.start()
         else:
             self.prediction_thread = None
@@ -235,7 +231,7 @@ class RTKalmanFilter:
                     break
 
             self.stop()
-        else:
+        elif self.sensor_topic != None:
             if self.filter.H.shape[0] == 1:
                 self.sub_sensor = rospy.Subscriber(
                         self.sensor_topic,
