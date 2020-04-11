@@ -85,7 +85,7 @@ class VideoAnnotator:
         self.counter += 1
         cv_image = self.to_opencv_image(data)
         for index, coord in enumerate(self.trajectory):
-            cv_image = cv2.circle(cv_image, (coord[1], coord[2]), 30, self.get_color(index), 2)
+            cv_image = cv2.circle(cv_image, (coord[1], coord[2]), 5, self.get_color(index), 2)
         cv2.imshow("image", cv_image)
         k = cv2.waitKey(1) & 0xff
         pass
