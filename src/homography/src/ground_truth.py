@@ -3,10 +3,8 @@ import cv2
 import sys
 
 class VideoAnnotator:
-    def __init__(self, video_file):
-        self.cap = cv2.VideoCapture(video_file)
-        self.counter = 0
-        self.trajectory = []
+    def __init__(self):
+        pass
 
     def frame_generator(self):
         # Define a generator that yields frames from the video.
@@ -22,7 +20,10 @@ class VideoAnnotator:
             self.trajectory.append((self.counter, x, y))
             print(self.trajectory)
 
-    def main(self):
+    def run_on_video_file(self, video_file):
+        self.counter = 0
+        self.trajectory = []
+        self.cap = cv2.VideoCapture(video_file)
         # Open windos and connect the callback function
         cv2.namedWindow("image", cv2.WINDOW_NORMAL)
         cv2.resizeWindow('image', 1200, 600)
@@ -39,7 +40,6 @@ class VideoAnnotator:
                 break
 
 
-
 if __name__ == "__main__":
-    instance = VideoAnnotator(sys.argv[1])
-    instance.main()
+    instance = VideoAnnotator()
+    instance.run_on_video_file(sys.argv[1])
