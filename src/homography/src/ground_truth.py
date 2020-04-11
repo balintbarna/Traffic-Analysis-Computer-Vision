@@ -9,7 +9,22 @@ from sensor_msgs.msg import Image
 
 class VideoAnnotator:
     def __init__(self):
+        self.colors = None
         pass
+
+    def init_colors(self):
+        self.colors = [
+            (0, 0, 255),
+            (0, 255, 0),
+            (255, 0, 0),
+            (0, 255, 255)
+            ]
+
+    def get_color(self, index):
+        if self.colors is None:
+            self.init_colors()
+        return self.colors[index%len(self.colors)]
+        
 
     def frame_generator(self):
         # Define a generator that yields frames from the video.
@@ -58,7 +73,7 @@ class VideoAnnotator:
         self.trajectory = []
         # opencv
         cv2.namedWindow("image", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('image', 1200, 600)
+        cv2.resizeWindow('image', 2400, 1200)
         cv2.setMouseCallback("image", self.annotate_position)
         # ros
         rospy.init_node('ground_truth')
@@ -69,6 +84,8 @@ class VideoAnnotator:
     def ros_callback(self, data):
         self.counter += 1
         cv_image = self.to_opencv_image(data)
+        for index, coord in enumerate(self.trajectory):
+            cv_image = cv2.circle(cv_image, (coord[1], coord[2]), 30, self.get_color(index), 2)
         cv2.imshow("image", cv_image)
         k = cv2.waitKey(1) & 0xff
         pass
