@@ -9,7 +9,6 @@ from sensor_msgs.msg import Image
 
 class VideoAnnotator:
     def __init__(self):
-        self.colors = None
         pass
 
     def init_colors(self):
@@ -21,10 +20,11 @@ class VideoAnnotator:
             ]
 
     def get_color(self, index):
-        if self.colors is None:
+        try:
+            self.colors
+        except AttributeError:
             self.init_colors()
-        return self.colors[index%len(self.colors)]
-        
+        return self.colors[index%len(self.colors)]        
 
     def frame_generator(self):
         # Define a generator that yields frames from the video.
