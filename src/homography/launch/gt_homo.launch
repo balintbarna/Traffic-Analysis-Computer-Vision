@@ -1,0 +1,26 @@
+<launch>
+	<!-- Open an image visualizer that can listen on various image topics -->
+	<node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" />
+
+	<!-- Publish frames from the traffic video on a ros topic -->
+	<node name="video_frame_publisher" pkg="video_stream" type="video_publisher.py" 
+		args="--video_source '$(find traffic_analysis_from_drones)/data/traffic_video_dyrskuepladsen.mp4' --framerate 10"/>
+
+	<!-- Connect the subscriber for the image_raw topic with the data on the /video_frame topic -->
+	<remap to="/video_stream_output" from="image_raw"/>
+
+	<!-- Stabilize the video -->
+	<node name="stabilizer" pkg="video_stabilizer_node" type="stabilizer.py" />
+
+	<!-- Map stabilizer to homography package -->
+	<remap to="/stabilized_frame" from="homography_input"/>
+
+	<!-- Do homography transformation -->
+	<node name="homography" pkg="homography" type="homography.py" />
+
+	<!-- Map Homography to ground truth package -->
+	<remap to="/homography_output" from="ground_truth_input"/>
+
+	<!-- Generate ground truth values -->
+	<node name="ground_truth" pkg="homography" type="ground_truth.py" output="screen" />
+</launch>
