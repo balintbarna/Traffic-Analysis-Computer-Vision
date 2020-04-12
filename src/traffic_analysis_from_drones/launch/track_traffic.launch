@@ -1,6 +1,6 @@
 <launch>
 	<!-- Open an image visualizer that can listen on various image topics -->
-	<node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" />
+    <node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" args="/homography_output"/>
 
 	<!-- Publish frames from the traffic video on a ros topic -->
 	<node name="video_frame_publisher" pkg="video_stream" type="video_publisher.py" 
