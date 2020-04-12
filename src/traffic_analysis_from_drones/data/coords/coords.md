@@ -9,5 +9,5 @@ Picture | Lon (E) | Lat (N) | Easting (X) | Northing (Y) | (X, Y)
 ![fourth](fourth.png) | 10.365092 | 55.380826 | 586491.0179540929 | 6138018.670434019 | (1225, 369)
 
 The distance between point #3 and #4 is roughly 80-81 metres.
-Their pixel coordinates on the warped image are (900, 1703) and (1255, 1156) which makes the eucledian pixel distance about 652.
+Their pixel coordinates on the warped image are (900, 1703) for #4 and (1255, 1156) for #3 which makes the eucledian pixel distance about 652 pixels.
 The GSD value, in metres/pixel, is therefore roughly 80.5/652 = **0.123 metres/pixel**
