@@ -19,10 +19,29 @@ class homography_node:
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("homography_input", Image, self.callback)
 
+        self.init_coords()
+
+    def init_coords(self):
+        img_coords = np.array([[231, 553], [697, 310], [910, 302], [1225, 369]])
+        utm_coords = np.array([
+            [586417.3794014237, 6138234.964123087],
+            [586539.4879360864, 6138145.410182816],
+            [586535.4632636021, 6138085.66494489],
+            [586491.0179540929, 6138018.670434019]])
+        
+        for coord in utm_coords:
+            coord[0] -= 586380
+            coord[0] *= 8
+            coord[1] -= 6137980
+            coord[1] *= 8
+
+        ret, mask = cv2.findHomography(img_coords, utm_coords)
+        self.transform = ret
+
     def callback(self, data):
         cv_image = self.to_opencv_image(data)
 
-        cv_image = self.transform_image(cv_image, None, None)
+        cv_image = self.transform_image(cv_image)
 
         self.publish_image(cv_image)
 
@@ -45,7 +64,8 @@ class homography_node:
         except Exception as ex:
             print(ex)
 
-    def transform_image(self, cv_image, img_points, real_points):
+    def transform_image(self, cv_image):
+        cv_image = cv2.warpPerspective(cv_image, self.transform, (2000, 2000))
         return cv_image
 
 def main():
