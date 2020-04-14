@@ -71,6 +71,7 @@ class Homography:
 
     def transform_image(self, cv_image):
         cv_image = cv2.warpPerspective(cv_image, self.transform, (2000, 2000))
+        cv_image = cv2.flip(cv_image, 0)
         return cv_image
 
 def main():
