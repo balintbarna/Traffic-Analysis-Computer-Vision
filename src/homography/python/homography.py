@@ -11,15 +11,20 @@ from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 
-class homography_node:
+class Homography:
     def __init__(self):
-        rospy.init_node('homography')
-        self.image_pub = rospy.Publisher("homography_output", Image, queue_size=10)
+        self.init_coords()
+
+    def start(self):
+        self.image_pub = rospy.Publisher("homography_output", Image, queue_size=1)
 
         self.bridge = CvBridge()
         self.image_sub = rospy.Subscriber("homography_input", Image, self.callback)
 
-        self.init_coords()
+        try:
+            rospy.spin()
+        except KeyboardInterrupt:
+            print("Shutting down")
 
     def init_coords(self):
         img_coords = np.array([[231, 553], [697, 310], [910, 302], [1225, 369]])
@@ -69,12 +74,10 @@ class homography_node:
         return cv_image
 
 def main():
+    rospy.init_node('homography')
     print("Launching homography node")
-    node = homography_node()
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        print("Shutting down")
+    node = Homography()
+    node.start()
 
 if __name__ == '__main__':
     main()

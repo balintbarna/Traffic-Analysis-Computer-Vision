@@ -1,0 +1,15 @@
+<launch>
+        <arg name="nodename" default="ex3"/>
+        <arg name="deltasec" default="0.05"/>
+        <arg name="intopic" default="/measurement"/>
+        <arg name="inbag" default="/home/fn/ros_workspace/bagfiles/kalman_filter_exercises/first_order_system.bag"/>
+        <arg name="outtopic" default="/ex3_filter/out"/>
+        <arg name="predtopic" default="/ex3_filter/prediction"/>
+        <arg name="updatetopic" default="/ex3_filter/update"/>
+        <arg name="groundtruthtopic" default="/true_value"/>
+
+        <node name="$(arg nodename)_visualizer" pkg="rqt_plot" type="rqt_plot" output="screen" args="$(arg predtopic)/data[0] $(arg updatetopic)/data[0] $(arg groundtruthtopic)/data"/>
+        <node name="$(arg nodename)_filter" pkg="kalman_filter" type="rt_kalman_filter.py" args="-n $(arg nodename)_filter -s $(arg deltasec) --intopic $(arg intopic) --outtopic $(arg outtopic) --pred-topic $(arg predtopic) --update-topic $(arg updatetopic)" output="screen"/>
+        <node name="$(arg nodename)_bag" pkg="rosbag" type="play" args="$(arg inbag)"/>
+</launch>
+

@@ -10,6 +10,9 @@ project(traffic_analysis_from_drones)
 find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
+  tracking
+  ros_video
+  homography
 )
 
 ## System dependencies are found with CMake's conventions
