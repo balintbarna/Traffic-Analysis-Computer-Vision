@@ -118,7 +118,7 @@ class MultiTracker:
         self.discover_new_objects(updated_tracked_frame)
 
         if self.out_frames_pub != None:
-            self.publish_tracked_frame(pre_tracked_frame)
+            self.publish_tracked_frame(frame)
 
     def update_current_trackers(
             self,
@@ -378,7 +378,7 @@ class MultiTracker:
             self,
             frame
     ):
-        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        #frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
         for obj in self.tracked_objects.tracked_objects:
             obj.acquire_lock()
 

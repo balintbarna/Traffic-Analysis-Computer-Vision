@@ -66,8 +66,8 @@ class KalmanMultiTrackerReceiver():
                 )
             else:
                 x = np.array([
-                    [start_pos[0]],
-                    [start_pos[1]],
+                    [start_pos[0, 0]],
+                    [start_pos[1, 0]],
                     [0.],
                     [0.]]
                 )
@@ -150,7 +150,7 @@ class KalmanMultiTrackerReceiver():
             loop=True
     ):
         self.pub = ROSImageStream(pub_topic_name="/hej")
-        self.sub = ROSImageStream(sub_topic_name="/stabilized_frame")
+        self.sub = ROSImageStream(sub_topic_name="/multi_tracker/tracked_frames")
         self.sub.img_stream_subscribe(
                 callback=self.publish_frame,
                 loop=False
@@ -182,7 +182,7 @@ class KalmanMultiTrackerReceiver():
             event
     ):
         self.kalman_filters_lock.acquire()
-        if event = "+":
+        if event == "+":
             #    self.kalman_filters[key] = None
             #self.kalman_filters[key] = self.KalmanTrackerReceiver(
             #        dt_prediction=self.dt_prediction,
@@ -245,11 +245,8 @@ class KalmanMultiTrackerReceiver():
             )
 
             self.kalman_filters[key].start()
-
-                    state_est_topic=self.state_est_topic
-            )
         else:
-            self.kalman_filters[key].update
+            self.kalman_filters[key].update_step(position)
 
         self.kalman_filters_lock.release()
 

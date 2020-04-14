@@ -242,7 +242,7 @@ if __name__ == '__main__':
 
         return frame
 
-    pt.set_pre_track_callbacks([h.transform_image, apply_mask, pt.pre_track_background_subtract, erosion, thresh, dilation])
+    pt.set_pre_track_callbacks([apply_mask, pt.pre_track_background_subtract, erosion, thresh, dilation])
 
     mt = MultiTracker(
             cnt_min_area=args.object_min_area,
