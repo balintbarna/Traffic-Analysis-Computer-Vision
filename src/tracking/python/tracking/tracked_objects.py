@@ -39,6 +39,7 @@ class TrackedObject:
     ):
         self.id = _id
         self.track_window = track_window
+        self.last_window = None
         self.status = status
         self.max_ttl = max_ttl
         self.ttl = self.max_ttl
@@ -117,17 +118,19 @@ class TrackedObject:
             msg.status = "removed"
             self.status_pub.publish(msg)
 
-    def supply_position(
+    def supply_window(
             self,
-            pos
+            window
     ):
-        if self.track_window != None and self.status == "lost":
-            self.track_window = (
-                    pos[1] + (self.track_window[2] / 2),
-                    pos[0] + (self.track_window[3] / 2),
-                    self.track_window[2],
-                    self.track_window[3]
-            )
+        #if self.track_window != None and self.status == "lost":
+        self.last_window = self.track_window
+        self.track_window = window
+            #self.track_window = (
+            #        pos[1] + (self.track_window[2] / 2),
+            #        pos[0] + (self.track_window[3] / 2),
+            #        self.track_window[2],
+            #        self.track_window[3]
+            #)
 
 class TrackedObjects:
     def __init__(

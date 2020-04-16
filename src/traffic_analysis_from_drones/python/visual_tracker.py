@@ -16,6 +16,7 @@
 
 import sys
 import argparse
+import json
 import threading
 from copy import copy
 
@@ -23,6 +24,7 @@ import cv2
 import numpy as np
 
 import rospy
+import rospkg
 
 from tracking.multi_tracker import MultiTracker
 from tracking.pre_tracker import PreTracker
@@ -197,6 +199,18 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
 
+    rospack = rospkg.RosPack()
+
+    rospack.list()
+
+    package_path = rospack.get_path('traffic_analysis_from_drones')
+
+    config_path = package_path + "/configuration/config.json"
+
+    config = None
+    with open(config_path) as f:
+        config = json.load(f)
+
     rospy.init_node(
             args.n,
             disable_signals=True
@@ -205,30 +219,18 @@ if __name__ == '__main__':
     pt = PreTracker(processed_frame_topic=args.pre_tracked_frames_topic)
 
     pt.set_background_subtract()
-    pt.set_median_blur(args.blur_ksize)
 
-    def crop(frame):
-        frame = copy(frame)
-        frame[:,:args.crop_left] = np.zeros(frame[:,:args.crop_left].shape)
-        frame[:,frame.shape[1]-args.crop_right:] = np.zeros(frame[:,frame.shape[1]-args.crop_right:].shape)
-        frame[:args.crop_top, :] = np.zeros(frame[:args.crop_top, :].shape)
-        frame[frame.shape[0] - args.crop_bottom:, :] = np.zeros(frame[frame.shape[0] - args.crop_bottom:, :].shape)
-
-        return frame
-
-    er_kernel = np.ones((4,4),np.uint8)
+    er_kernel = np.ones((config["erosion_kernel"],config["erosion_kernel"]),np.uint8)
 
     def erosion(frame):
         return cv2.erode(frame, er_kernel)
 
-    di_kernel = np.ones((11,11),np.uint8)
+    di_kernel = np.ones((config["dilation_kernel"],config["dilation_kernel"]),np.uint8)
 
     def dilation(frame):
         return cv2.dilate(frame, di_kernel)
 
-    h = Homography()
-
-    mask = cv2.imread(args.mask_path, 0)
+    mask = cv2.imread(package_path + config["mask_path"], 0)
 
     def apply_mask(frame):
         return cv2.bitwise_and(
@@ -238,18 +240,19 @@ if __name__ == '__main__':
         )
 
     def thresh(frame):
-        ret, frame = cv2.threshold(frame, 10, 255, cv2.THRESH_BINARY)
+        ret, frame = cv2.threshold(frame, config["threshold"], 255, cv2.THRESH_BINARY)
 
         return frame
 
     pt.set_pre_track_callbacks([apply_mask, pt.pre_track_background_subtract, erosion, thresh, dilation])
 
     mt = MultiTracker(
-            cnt_min_area=args.object_min_area,
-            window_max_width=args.window_max_width,
-            lost_ttl_attempts=args.lost_attempts,
-            max_tracked_objects=args.max_tracked_objects,
-            overlap_margin=args.overlap_margin,
+            cnt_min_area=config["object_min_area"],
+            window_max_width=config["window_max_width"],
+            lost_ttl_attempts=config["lost_attempts"],
+            max_tracked_objects=config["max_tracked_objects"],
+            overlap_margin=config["overlap_margin"],
+            allowed_directions=['w','e'],
             pre_tracker=pt,
             in_frames_topic=args.i,
             out_frames_topic=args.o,

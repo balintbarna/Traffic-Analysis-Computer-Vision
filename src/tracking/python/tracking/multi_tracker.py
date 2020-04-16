@@ -1,11 +1,9 @@
 #!/usr/bin/env python2.7
 
 """
-    Module with classes MultiTracker and MultiTrackerReceiver for 
-    tracking multiple objects visually using several Tracker type objects.
-    MultiTrackerReceiver provides functionality for reading the tracked 
-    objects information from the topics published to by MultiTracker. 
-    Gives full abstraction from the ROS communication underneath.
+    Module with clas MultiTracker for tracking multiple objects visually 
+    using several Tracker type objects and publishing to specified
+    topics. Can be used as library utility or executable. When executed, launches a MultiTracker node.
 
     Change log: 
     Created     frnyb       20200401
@@ -13,6 +11,10 @@
     Rewritten for Python 2.7:
     Shebang, contour finding
                 frnyb       20200410
+    
+    MultiTrackerReceiver class moved 
+    to separate module.
+                frnyb       20200415
 """
 
 ########################################################################
@@ -48,6 +50,7 @@ class MultiTracker:
             lost_ttl_attempts=10,
             max_tracked_objects=30,
             overlap_margin=25,
+            allowed_directions=['n', 's', 'e', 'w'],
             pre_tracker=None,
             in_frames_topic="/img_stream",
             out_events_topic="/multi_tracker/global_events",
@@ -62,6 +65,7 @@ class MultiTracker:
         self.lost_ttl_attempts = lost_ttl_attempts
         self.max_tracked_objects = max_tracked_objects
         self.overlap_margin = overlap_margin
+        self.allowed_directions = allowed_directions
 
         if pre_tracker == None:
             self.pre_tracker = PreTracker()#processed_frame_topic="/pre_tracked_frame")
@@ -152,6 +156,72 @@ class MultiTracker:
                             self.window_max_width
                     )
 
+            if obj.track_window != None and obj.last_window != None:
+                last_vel = np.array([obj.track_window[1] - obj.last_window[1], obj.track_window[0] - obj.last_window[0]])
+                last_dir = None
+                if abs(last_vel[0]) > abs(last_vel[1]):
+                    if last_vel[0] < 0:
+                        last_dir = 'n'
+                    else:
+                        last_dir = 's'
+                else:
+                    if last_vel[1] < 0:
+                        last_dir = 'w'
+                    else:
+                        last_dir = 'e'
+
+                current_vel = np.array([track_window[1] - obj.track_window[1], track_window[0] - obj.track_window[0]])
+                current_dir = None
+                if abs(current_vel[0]) > abs(current_vel[1]):
+                    if current_vel[0] < 0:
+                        current_dir = 'n'
+                    else:
+                        current_dir = 's'
+                else:
+                    if current_vel[1] < 0:
+                        current_dir = 'w'
+                    else:
+                        current_dir = 'e'
+
+                if current_dir != last_dir:
+                    if (
+                            last_dir == "n" and current_dir == "s" or
+                            last_dir == "s" and current_dir == "n" or
+                            last_dir == "w" and current_dir == "e" or 
+                            last_dir == "e" and current_dir == "w"
+                    ):
+                        pre_tracked_frame = self.handle_lost_object(
+                                obj,
+                                pre_tracked_frame,
+                                immediate_remove=True
+                        )
+                    else:
+                        pre_tracked_frame = self.handle_lost_object(
+                                obj,
+                                pre_tracked_frame,
+                                immediate_remove=True
+                        )
+
+                    obj.release_lock()
+
+                    continue
+
+                allowed_dir = False
+                for direction in self.allowed_directions:
+                    if direction == current_dir:
+                        allowed_dir = True
+                        break
+
+                if not allowed_dir:
+                    pre_tracked_frame = self.handle_lost_object(
+                            obj,
+                            pre_tracked_frame,
+                            immediate_remove=True
+                    )
+
+                    obj.release_lock()
+
+                    continue
 
             #if (
             #        obj.track_window[0] + obj.track_window[2] < 0 or
@@ -213,7 +283,7 @@ class MultiTracker:
 
                 continue
 
-            obj.track_window = track_window
+            obj.supply_window(track_window)
 
             pre_tracked_frame = self.handle_ok_object(
                     obj,
@@ -227,8 +297,12 @@ class MultiTracker:
     def handle_lost_object(
             self,
             obj,
-            pre_tracked_frame
+            pre_tracked_frame,
+            immediate_remove=False
     ):
+        if immediate_remove:
+            obj.ttl = 0
+
         obj.set_lost()
 
         x_lowerb, x_upperb, y_lowerb, y_upperb = self.get_slices(
@@ -402,178 +476,6 @@ class MultiTracker:
             obj.release_lock()
 
         self.out_frames_pub.publish_single(frame)
-
-class MultiTrackerReceiver:
-    def __init__(
-            self,
-            max_tracked_objects=30,
-            event_callback=None, #callback(key, event)
-            status_callback=None, #callback(key, status)
-            position_callback=None, #callback(key, pos)
-            in_events_topic="/multi_tracker/global_events",
-            in_status_topic="/multi_tracker/status",
-            in_window_topic="/multi_tracker/window",
-            out_kalman_topic="/multi_tracker/pos"
-    ):
-        self.max_tracked_objects = max_tracked_objects
-
-        self.event_callback = event_callback
-        self.status_callback = status_callback
-        self.position_callback = position_callback
-
-        self.in_events_topic = in_events_topic
-        self.in_status_topic = in_status_topic
-        self.in_window_topic = in_window_topic
-        self.out_kalman_topic = out_kalman_topic
-
-        self.tracked_objects = TrackedObjects(
-                max_tracked_objects=max_tracked_objects,
-                locked=True
-        )
-
-    def start(
-            self,
-            loop=True
-    ):
-        self.events_topic = rospy.Subscriber(
-                self.in_events_topic,
-                Event,
-                callback=self._event_callback,
-                queue_size=self.max_tracked_objects
-        )
-
-        self.status_topic = rospy.Subscriber(
-                self.in_status_topic,
-                Status,
-                callback=self._status_callback,
-                queue_size=self.max_tracked_objects
-        )
-
-        self.window_sub = rospy.Subscriber(
-                self.in_window_topic,
-                Window,
-                callback=self._window_callback,
-                queue_size=self.max_tracked_objects
-        )
-
-        if self.out_kalman_topic != None:
-            self.kalman_pub = rospy.Publisher(
-                    self.out_kalman_topic,
-                    Window,
-                    queue_size=self.max_tracked_objects
-            )
-        else:
-            self.kalman_pub = None
-
-        if loop:
-            rospy.spin()
-
-    def stop(self):
-        self.events_topic.unregister()
-        self.events_topic = None
-
-        self.status_topic.unregister()
-        self.status_topic = None
-
-        self.window_sub.unregister()
-        self.window_sub = None
-
-        if self.out_kalman_topic != None:
-            self.kalman_pub.unregister()
-            self.kalman_pub = None
-        else:
-            self.kalman_pub = None
-
-    def _event_callback(
-            self,
-            msg
-    ):
-        self.tracked_objects.acquire_lock()
-
-        if msg.event == "+":
-            pass
-        #    if msg.id in list(self.tracked_objects.keys):
-        #        self.tracked_objects.remove(msg.id)
-
-        #    self.tracked_objects.create(key=msg.id)
-        elif msg.event == "-":
-            if msg.id in list(self.tracked_objects.keys):
-                self.tracked_objects.remove(msg.id)
-
-        self.tracked_objects.release_lock()
-
-        if self.event_callback != None:
-            self.event_callback(
-                    msg.id,
-                    msg.event
-            )
-
-    def _status_callback(
-            self,
-            msg
-    ):
-        self.tracked_objects.acquire_lock()
-
-        if msg.id in list(self.tracked_objects.keys):
-            self.tracked_objects.get_item(msg.id).status = msg.status
-
-        self.tracked_objects.release_lock()
-
-        if self.status_callback != None:
-            self.status_callback(
-                    msg.id,
-                    msg.status
-            )
-
-    def _window_callback(
-            self,
-            msg
-    ):
-        self.tracked_objects.acquire_lock()
-
-        if msg.id in self.tracked_objects.keys:
-            pass
-            #self.tracked_objects.tracked_objects[self.tracked_objects.keys.index(msg.id)].window = msg.window
-        else:
-            self.tracked_objects.create(
-                    key=msg.id,
-                    window=msg.window
-            )
-
-        self.tracked_objects.release_lock()
-
-        if self.position_callback != None:
-            position = ((msg.window[1] + (msg.window[3] / 2)), msg.window[0] + (msg.window[2] / 2))
-            self.position_callback(
-                    msg.id,
-                    position
-            )
-
-    def supply_kalman_estimate(
-            self,
-            pos,
-            id
-    ):
-        self.tracked_objects.acquire_lock()
-
-        if id in list(self.tracked_objects.keys):
-            obj = self.tracked_objects.tracked_objects[self.tracked_objects.keys.index(id)]
-
-            if obj.status == "lost" and obj.track_window != None:
-                obj.track_window = ( 
-                        int(pos[1] - (obj.track_window[2] / 2)),
-                        int(pos[0] - (obj.track_window[3] / 2)),
-                        int(obj.track_window[2]),
-                        int(obj.track_window[3])
-                )
-
-                msg = Window()
-                msg.id = id
-                msg.window = obj.track_window
-
-                self.kalman_pub.publish(msg)
-
-        self.tracked_objects.release_lock()
 
 ########################################################################
 # Methods:

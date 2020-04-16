@@ -25,7 +25,7 @@ import rospy
 from kalman_filter.rt_kalman_filter import RTKalmanFilter
 from filterpy.common import Q_discrete_white_noise
 
-from multi_tracker import MultiTrackerReceiver
+from multi_tracker_receiver import MultiTrackerReceiver
 
 from ros_video.ros_img_stream import ROSImageStream
 
@@ -149,8 +149,8 @@ class KalmanMultiTrackerReceiver():
             self,
             loop=True
     ):
-        self.pub = ROSImageStream(pub_topic_name="/hej")
-        self.sub = ROSImageStream(sub_topic_name="/multi_tracker/tracked_frames")
+        self.pub = ROSImageStream(pub_topic_name="/kalman_frames")
+        self.sub = ROSImageStream(sub_topic_name="/homography_output")
         self.sub.img_stream_subscribe(
                 callback=self.publish_frame,
                 loop=False
