@@ -12,6 +12,7 @@
 
 import sys
 import argparse
+import json
 import threading
 from math import sqrt
 
@@ -19,6 +20,7 @@ import cv2
 import numpy as np
 
 import rospy
+import rospkg
 
 from tracking.kalman_multi_tracker_receiver import KalmanMultiTrackerReceiver
 from ros_video.ros_img_stream import ROSImageStream
@@ -31,6 +33,7 @@ class KalmanCarTracker(KalmanMultiTrackerReceiver):
             self,
             max_tracked_objects=30,
             dt_prediction=0.05,
+            gsd=1,
             prediction_topic=None,
             update_topic=None,
             state_est_topic="/kalman_multi_tracker/state_est",
@@ -53,6 +56,8 @@ class KalmanCarTracker(KalmanMultiTrackerReceiver):
                 in_window_topic,
                 out_kalman_topic
         )
+
+        self.gsd = gsd
 
         self.frames_sub = ROSImageStream(sub_topic_name=in_frame_topic)
         self.frames_pub = ROSImageStream(pub_topic_name=out_frame_topic)
@@ -125,7 +130,7 @@ class KalmanCarTracker(KalmanMultiTrackerReceiver):
             frame,
             car
     ):
-        text = str(car["UniqId"]) + ", " + str(car["CurrX"]) + ", " + str(car["CurrY"]) + ", " + str(car["CurrVelX"]) + ", " + str(car["CurrVelY"])
+        text = str(car["UniqId"]) + ", " + str(int(car["CurrX"] * self.gsd)) + ", " + str(int(car["CurrY"] * self.gsd)) + ", " + str(int(car["CurrVelX"] * self.gsd)) + ", " + str(int(car["CurrVelY"] * self.gsd))
         frame = cv2.putText(
                 frame,
                 text,
@@ -283,22 +288,6 @@ def get_args():
             default="/multi_tracker/pos"
     )
 
-    parser.add_argument(
-            "--max-tracked-objects",
-            help="Maximum number of simoultaneously tracked objects.",
-            type=int,
-            action="store",
-            default=50
-    )
-
-    parser.add_argument(
-            "--dt-prediction",
-            help="Time in between each prediction step in seconds.",
-            type=float,
-            action="store",
-            default=0.05
-    )
-
     return parser.parse_args(sys.argv[1:])
 
 ########################################################################
@@ -306,6 +295,14 @@ def get_args():
 
 if __name__ == '__main__':
     args = get_args()
+    
+    pack = rospkg.RosPack()
+
+    path = pack.get_path('traffic_analysis_from_drones') + "/configuration/config.json"
+
+    config = None
+    with open(path) as f:
+        config = json.load(f)
 
     rospy.init_node(
             args.n,
@@ -313,8 +310,9 @@ if __name__ == '__main__':
     )
 
     kmtr = KalmanCarTracker( 
-            max_tracked_objects=args.max_tracked_objects,
-            dt_prediction=args.dt_prediction,
+            max_tracked_objects=config["max_tracked_objects"],
+            dt_prediction=config["dt_prediction"],
+            gsd=config["gsd"],
             prediction_topic=args.prediction_topic,
             update_topic=args.update_topic,
             state_est_topic=args.o,

@@ -25,7 +25,9 @@ import rospy
 from kalman_filter.rt_kalman_filter import RTKalmanFilter
 from filterpy.common import Q_discrete_white_noise
 
-from multi_tracker import MultiTrackerReceiver
+from multi_tracker_receiver import MultiTrackerReceiver
+
+from ros_video.ros_img_stream import ROSImageStream
 
 ########################################################################
 # Classes:
@@ -37,7 +39,8 @@ class KalmanMultiTrackerReceiver():
                 dt_prediction=0.05,
                 prediction_topic=None,
                 update_topic=None,
-                state_est_topic="/rt_kalman_filter/state_est"
+                state_est_topic="/rt_kalman_filter/state_est",
+                start_pos=None
         ):
             self.dt_prediction = dt_prediction
 
@@ -52,12 +55,23 @@ class KalmanMultiTrackerReceiver():
             self.pub_update = None
             self.pub_state_est = None
 
-            x = np.array([
-                [0.],   #px
-                [0.],   #py
-                [0.],   #vx
-                [0.]]   #vy
-            )
+            x = None
+
+            if start_pos != None:
+                x = np.array([
+                    [0.],   #px
+                    [0.],   #py
+                    [0.],   #vx
+                    [0.]]   #vy
+                )
+            else:
+                x = np.array([
+                    [start_pos[0, 0]],
+                    [start_pos[1, 0]],
+                    [0.],
+                    [0.]]
+                )
+
             F = np.array([
                         [1., 0, self.dt_prediction, 0], 
                         [0., 1., 0., self.dt_prediction],
@@ -69,10 +83,10 @@ class KalmanMultiTrackerReceiver():
                 [1., 0., 0., 0.]]
             )
             P = np.array([
-                [10. ,0., 0., 0.], 
-                [0., 10., 0., 0.],
-                [0., 0., 10., 0.],
-                [0., 0., 0., 10.]]
+                [100000. ,0., 0., 0.], 
+                [0., 100000., 0., 0.],
+                [0., 0., 100000., 0.],
+                [0., 0., 0., 100000.]]
             )
             R = np.array([
                 [1.5, 0],
@@ -135,7 +149,32 @@ class KalmanMultiTrackerReceiver():
             self,
             loop=True
     ):
+        self.pub = ROSImageStream(pub_topic_name="/kalman_frames")
+        self.sub = ROSImageStream(sub_topic_name="/homography_output")
+        self.sub.img_stream_subscribe(
+                callback=self.publish_frame,
+                loop=False
+        )
+
         self.multi_tracker_receiver.start(loop=loop)
+
+    def publish_frame(
+            self,
+            frame
+    ):
+        self.kalman_filters_lock.acquire()
+
+        for k in self.kalman_filters.keys():
+            frame = cv2.circle(
+                    frame,
+                    (int(self.kalman_filters[k].filter.x[0,0]), int(self.kalman_filters[k].filter.x[1,0])),
+                    10,
+                    (255,0,0)
+            )
+
+        self.pub.publish_single(frame)
+
+        self.kalman_filters_lock.release()
 
     def event_callback(
             self,
@@ -143,21 +182,20 @@ class KalmanMultiTrackerReceiver():
             event
     ):
         self.kalman_filters_lock.acquire()
-
         if event == "+":
-            if key in self.kalman_filters.keys():
-                self.kalman_filters[key].stop()
-                self.kalman_filters[key] = None
+            #    self.kalman_filters[key] = None
+            #self.kalman_filters[key] = self.KalmanTrackerReceiver(
+            #        dt_prediction=self.dt_prediction,
+            #        prediction_topic=self.prediction_topic,
+            #        update_topic=self.update_topic,
+            #        state_est_topic=self.state_est_topic
+            #)
 
-            self.kalman_filters[key] = self.KalmanTrackerReceiver(
-                    dt_prediction=self.dt_prediction,
-                    prediction_topic=self.prediction_topic,
-                    update_topic=self.update_topic,
-                    state_est_topic=self.state_est_topic
-            )
-
-
-            self.kalman_filters[key].start()
+            #self.kalman_filters[key].start()
+            #if key in self.kalman_filters.keys():
+            #    self.kalman_filters[key].stop()
+            #    self.kalman_filters[key] = None
+            pass
 
         elif event == "-":
             if key in self.kalman_filters.keys():
@@ -196,8 +234,18 @@ class KalmanMultiTrackerReceiver():
             position
     ):
         self.kalman_filters_lock.acquire()
+        
+        if key not in self.kalman_filters.keys():
+            self.kalman_filters[key] = self.KalmanTrackerReceiver(
+                    dt_prediction=self.dt_prediction,
+                    prediction_topic=self.prediction_topic,
+                    update_topic=self.update_topic,
+                    state_est_topic=self.state_est_topic,
+                    start_pos=position
+            )
 
-        if key in self.kalman_filters.keys():
+            self.kalman_filters[key].start()
+        else:
             self.kalman_filters[key].update_step(position)
 
         self.kalman_filters_lock.release()

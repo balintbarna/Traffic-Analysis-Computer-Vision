@@ -1,0 +1,13 @@
+{
+    "object_min_area":600,
+    "lost_attempts": 15,
+    "max_tracked_objects": 50,
+    "overlap_margin": 10,
+    "window_max_width": 60,
+    "dt_prediction": 0.05,
+    "mask_path":"/images/mask.png",
+    "erosion_kernel": 4,
+    "dilation_kernel": 11,
+    "threshold": 10,
+    "gsd":0.123
+}
