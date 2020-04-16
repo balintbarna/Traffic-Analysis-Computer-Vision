@@ -541,38 +541,6 @@ def get_args():
             default="/multi_tracker/pos"
     )
 
-    parser.add_argument(
-            "--object-min-area",
-            help="The minimum area in pixels of an object contour to be tracked.",
-            type=int,
-            action="store",
-            default=500
-    )
-
-    parser.add_argument(
-            "--lost-attempts",
-            help="Number of cycles to wait for a lost object before removing.",
-            type=int,
-            action="store",
-            default=10
-    )
-
-    parser.add_argument(
-            "--max-tracked-objects",
-            help="Maximum number of simoultaneously tracked objects.",
-            type=int,
-            action="store",
-            default=50
-    )
-
-    parser.add_argument(
-            "--overlap-margin",
-            help="Margin around a tracked object in pixels.",
-            type=int,
-            action="store",
-            default=25
-    )
-
     return parser.parse_args(sys.argv[1:])
 
 ########################################################################
@@ -587,10 +555,6 @@ if __name__ == '__main__':
     )
 
     mt = MultiTracker(
-            cnt_min_area=args.object_min_area,
-            lost_ttl_attempts=args.lost_attempts,
-            max_tracked_objects=args.max_tracked_objects,
-            overlap_margin=args.overlap_margin,
             in_frames_topic=args.i,
             out_frames_topic=args.o,
             out_events_topic=args.events_topic,

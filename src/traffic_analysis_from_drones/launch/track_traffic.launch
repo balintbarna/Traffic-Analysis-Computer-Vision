@@ -1,7 +1,10 @@
 <launch>
     <!-- System names -->
+    <arg name="homographynode" default="homography"/>
+    <arg name="homographyintopic" default="/$(arg homographynode)/input"/>
+    <arg name="homographyouttopic" default="/$(arg homographynode)/output"/>
+
     <arg name="multitrackernode" default="multi_tracker"/>
-    <arg name="homographyouttopic" default="/homography_output"/>
     <arg name="multitrackedframestopic" default="/$(arg multitrackernode)/tracked_frames"/>
     <arg name="pretrackedframestopic" default="/$(arg multitrackernode)/pretracked_frames"/>
     <arg name="eventstopic" default="/$(arg multitrackernode)/global_events"/>
@@ -9,12 +12,12 @@
     <arg name="windowtopic" default="/$(arg multitrackernode)/window"/>
     <arg name="kalmantopic" default="/$(arg multitrackernode)/pos"/>
 
-    <arg name="kalmannode" default="rt_kalman_filter"/>
+    <arg name="kalmannode" default="kalman_filter"/>
     <arg name="kalmanframestopic" default="/kalman_frames"/>
     <arg name="outframestopic" default="/out"/>
 
 	<!-- Open an image visualizer that can listen on various image topics -->
-    <node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" args="$(arg pretrackedframestopic)"/>
+    <node name="visualizer" pkg="rqt_image_view" type="rqt_image_view" args="$(arg outframestopic)"/>
 
 	<!-- Publish frames from the traffic video on a ros topic -->
 	<node name="video_frame_publisher" pkg="video_stream" type="video_publisher.py" 
@@ -27,18 +30,19 @@
 	<node name="stabilizer" pkg="video_stabilizer_node" type="stabilizer.py" />
 
 	<!-- Map stabilizer to homography package -->
-    <remap to="/stabilized_frame" from="/homography_input"/>
+    <remap to="/stabilized_frame" from="$(arg homographyintopic)"/>
 
 	<!-- Do homography transformation -->
-    <node name="homography" pkg="homography" type="homography.py"/>
+    <!--<node name="homography" pkg="homography" type="homography.py"/>-->
+    <node name="homography" pkg="traffic_analysis_from_drones" type="homography_node.py" args="-n $(arg homographynode) -i $(arg homographyintopic) -o $(arg homographyouttopic)"/>
 
 	<!-- Map Homography to tracker package -->
     <!--<remap to="/homography_output" from="tracker_input"/>-->
 
 	<!-- Visual multi tracker -->
-    <node name="visual_tracker" pkg="traffic_analysis_from_drones" type="visual_tracker.py" args="-n $(arg multitrackernode) -i /homography_output -o $(arg multitrackedframestopic) --pre-tracked-frames-topic $(arg pretrackedframestopic) --events-topic $(arg eventstopic) --status-topic $(arg statustopic) --window-topic $(arg windowtopic) --kalman-topic $(arg kalmantopic)" output="screen"/>
+    <node name="visual_tracker" pkg="traffic_analysis_from_drones" type="visual_tracker.py" args="-n $(arg multitrackernode) -i $(arg homographyouttopic) -o $(arg multitrackedframestopic) --pre-tracked-frames-topic $(arg pretrackedframestopic) --events-topic $(arg eventstopic) --status-topic $(arg statustopic) --window-topic $(arg windowtopic) --kalman-topic $(arg kalmantopic)" output="screen"/>
 
     <!-- Car tracker node -->
-    <node name="car_tracker" pkg="traffic_analysis_from_drones" type="kalman_car_tracker.py" args="-n $(arg kalmannode) --events-topic $(arg eventstopic) --status-topic $(arg statustopic) --window-topic $(arg windowtopic) --kalman-topic $(arg kalmantopic)" output="screen"/> 
+    <node name="car_tracker" pkg="traffic_analysis_from_drones" type="car_tracker.py" args="-n $(arg kalmannode) -i $(arg homographyouttopic) -o $(arg outframestopic) --out-kalman-frames $(arg kalmanframestopic) --events-topic $(arg eventstopic) --status-topic $(arg statustopic) --window-topic $(arg windowtopic) --kalman-topic $(arg kalmantopic)" output="screen"/> 
 
 </launch>

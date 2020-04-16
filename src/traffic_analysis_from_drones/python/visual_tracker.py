@@ -28,8 +28,6 @@ import rospkg
 
 from tracking.multi_tracker import MultiTracker
 from tracking.pre_tracker import PreTracker
-from homography.homography import Homography
-
 
 ########################################################################
 # Methods:
@@ -193,23 +191,26 @@ def get_args():
 
     return parser.parse_args(sys.argv[1:])
 
-########################################################################
-# Main:
-
-if __name__ == '__main__':
-    args = get_args()
-
+def get_config(package):
     rospack = rospkg.RosPack()
 
-    rospack.list()
-
-    package_path = rospack.get_path('traffic_analysis_from_drones')
+    package_path = rospack.get_path(package)
 
     config_path = package_path + "/configuration/config.json"
 
     config = None
     with open(config_path) as f:
         config = json.load(f)
+
+    return package_path, config
+
+########################################################################
+# Main:
+
+if __name__ == '__main__':
+    args = get_args()
+
+    package_path, config = get_config("traffic_analysis_from_drones")
 
     rospy.init_node(
             args.n,

@@ -118,7 +118,9 @@ class KalmanMultiTrackerReceiver():
             in_events_topic="/multi_tracker/global_events",
             in_status_topic="/multi_tracker/status",
             in_window_topic="/multi_tracker/window",
-            out_kalman_topic="/multi_tracker/pos"
+            out_kalman_topic="/multi_tracker/pos",
+            in_frames_topic=None,
+            out_frames_topic=None
     ):
         self.max_tracked_objects = max_tracked_objects
         self.dt_prediction = dt_prediction
@@ -130,6 +132,8 @@ class KalmanMultiTrackerReceiver():
         self.in_status_topic = in_status_topic
         self.in_window_topic = in_window_topic
         self.out_kalman_topic = out_kalman_topic
+        self.in_frames_topic = in_frames_topic
+        self.out_frames_topic = out_frames_topic
 
         self.kalman_filters = {} # {"key":KalmanTrackerReceiver}
         self.kalman_filters_lock = threading.Lock()
@@ -149,12 +153,13 @@ class KalmanMultiTrackerReceiver():
             self,
             loop=True
     ):
-        self.pub = ROSImageStream(pub_topic_name="/kalman_frames")
-        self.sub = ROSImageStream(sub_topic_name="/homography_output")
-        self.sub.img_stream_subscribe(
-                callback=self.publish_frame,
-                loop=False
-        )
+        if self.in_frames_topic is not None and self.out_frames_topic is not None:
+            self.pub = ROSImageStream(pub_topic_name=self.out_frames_topic)
+            self.sub = ROSImageStream(sub_topic_name=self.in_frames_topic)
+            self.sub.img_stream_subscribe(
+                    callback=self.publish_frame,
+                    loop=False
+            )
 
         self.multi_tracker_receiver.start(loop=loop)
 
@@ -322,22 +327,6 @@ def get_args():
             default="/multi_tracker/pos"
     )
 
-    parser.add_argument(
-            "--max-tracked-objects",
-            help="Maximum number of simoultaneously tracked objects.",
-            type=int,
-            action="store",
-            default=50
-    )
-
-    parser.add_argument(
-            "--dt-prediction",
-            help="Time in between each prediction step in seconds.",
-            type=float,
-            action="store",
-            default=0.05
-    )
-
     return parser.parse_args(sys.argv[1:])
 
 ########################################################################
@@ -352,8 +341,6 @@ if __name__ == '__main__':
     )
 
     kmtr = KalmanMultiTrackerReceiver( 
-            max_tracked_objects=args.max_tracked_objects,
-            dt_prediction=args.dt_prediction,
             prediction_topic=args.prediction_topic,
             update_topic=args.update_topic,
             state_est_topic=args.o,

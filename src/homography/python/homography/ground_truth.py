@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 import roslib
 roslib.load_manifest('homography')
 import cv2

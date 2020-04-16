@@ -3,3 +3,5 @@ build
 devel
 logs
 *.swp
+*.pyc
+*.mp4
